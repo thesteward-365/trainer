@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(python3 -c \"import playwright\")",
+      "Bash(node -e \"require\\('playwright'\\)\")",
+      "Bash(node -e \"require\\('puppeteer'\\)\")",
+      "Bash(npm ls *)",
+      "Read(//Applications/**)",
+      "Bash(mdfind \"kMDItemFSName == 'Google Chrome.app'\")",
+      "Bash(node -e \"require\\('jsdom'\\)\")",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --version)",
+      "Bash(node test.js)",
+      "Read(//private/tmp/claude-501/-Users-yeonhui-projects-trainer/8d40dbcc-a6de-4724-abad-4780900873fd/scratchpad/**)",
+      "Bash(pkill -f \"http.server 8791\")",
+      "Bash(node --check /tmp/_check.js)",
+      "Bash(node test2.js)",
+      "Bash(node test3.js)"
+    ]
+  }
+}

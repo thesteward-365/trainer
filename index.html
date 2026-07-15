@@ -34,7 +34,7 @@
       .phone {
         width: 100%;
         max-width: 430px;
-        background: #f0f2f5;
+        background: #f6f7f9;
         overflow: hidden;
         position: relative;
         display: flex;
@@ -66,8 +66,9 @@
 
       const state = {
         screen: "schedule", // schedule | record | members | memberDetail | exerciseGraph | profile | myRoutines
-        segment: "diary", // diary | graph | exercise | routine (memberDetail tabs)
-        sheet: null, // null | schedule | member | routine | edit | loadRoutine | exercisePicker
+        selectedMemberName: "김민지",
+        segment: "home", // home | diary | exercise | routine (memberDetail tabs)
+        sheet: null, // null | schedule | member | routine | edit | loadRoutine | exercisePicker | monthlyCalendar
         recordFrom: "schedule",
         gender: "all", // all | m | f
         diaryFilter: "session", // session | body | diet
@@ -81,42 +82,65 @@
         exercisePicker: null, // { part, selected: [], replaceTarget? } while sheet === "exercisePicker"
         exerciseMenu: null, // 열려있는 운동 카드 ⋮ 메뉴의 exercise id
         scheduleParts: [], // 일정 등록 시트에서 선택한 수업 부위
+        otherSchedulePart: "", // 기타 일정 상세 입력값
+        showSpeedDial: false, // 스피드 다이얼 팝업 토글
+        scheduleType: "session", // session (수업) | consult (상담) 일정 유형
+        consultantName: "", // 상담 일정 등록 시 입력한 비회원 이름
+        consultMemo: "", // 상담 일정 등록 시 입력한 메모
+        consultTargetName: "", // 상담 상세 화면용 타겟 회원명
+        consultTargetMemo: "", // 상담 상세 화면용 메모
+        consultTargetPurpose: "", // 상담 상세 화면용 방문 목적
+        memberFilter: "registered", // registered (등록 회원) | unregistered (미등록 회원)
+        exerciseTabPart: "전체", // 회원 상세 운동 탭 부위 필터
+        memoOpen: false, // 회원 홈 메모 카드 펼침 여부
+        calendarYear: 2026, // 달력 조회용 연도
+        calendarMonth: 7, // 달력 조회용 월
       };
 
       const TODAY_DATE = "7.14";
 
       const scheduleData = {
-        "7.12": { weekday: "일", sessions: [] },
-        "7.13": {
+        7.12: { weekday: "일", sessions: [] },
+        7.13: {
           weekday: "월",
           sessions: [
             { time: "09:00", name: "오세라", tags: ["하체"] },
             { time: "18:00", name: "강도윤", tags: ["가슴어깨"] },
           ],
         },
-        "7.14": {
+        7.14: {
           weekday: "화",
           sessions: [
             { time: "07:00", name: "이서준", tags: ["하체", "복근"] },
+            { time: "08:30", name: "오세라", tags: ["하체"] },
+            { time: "09:30", name: "김도현", tags: ["등"] },
             { time: "10:00", name: "김민지", tags: ["가슴어깨"] },
+            { time: "11:30", name: "박지성", tags: ["상담"] },
+            { time: "12:30", name: "한지민", tags: ["상담"] },
             { time: "14:00", name: "최유나", tags: ["등"] },
+            { time: "15:00", name: "이수빈", tags: ["가슴어깨"] },
+            { time: "16:00", name: "서지우", tags: ["하체", "복근"] },
             { time: "17:00", name: "정하늘", tags: ["하체"] },
+            { time: "18:00", name: "문가영", tags: ["등"] },
             { time: "19:00", name: "강도윤", tags: ["가슴어깨", "복근"] },
+            { time: "20:00", name: "임채원", tags: ["상담"] },
+            { time: "21:00", name: "배윤호", tags: ["하체"] },
           ],
         },
-        "7.15": {
+        7.15: {
           weekday: "수",
           sessions: [
             { time: "08:00", name: "정하늘", tags: ["등"] },
+            { time: "11:00", name: "이영표", tags: ["상담"] },
             { time: "16:00", name: "최유나", tags: ["하체"] },
           ],
         },
-        "7.16": { weekday: "목", sessions: [] },
-        "7.17": {
+        7.16: { weekday: "목", sessions: [] },
+        7.17: {
           weekday: "금",
           sessions: [{ time: "11:00", name: "이서준", tags: ["가슴어깨"] }],
         },
-        "7.18": { weekday: "토", sessions: [] },
+        7.18: { weekday: "토", sessions: [] },
       };
 
       const routines = [
@@ -250,6 +274,14 @@
           warn: false,
         },
         {
+          name: "박지성",
+          gender: "m",
+          info: "미등록 회원",
+          left: 0,
+          total: 0,
+          isUnregistered: true,
+        },
+        {
           name: "오세라",
           gender: "f",
           info: "주 1회",
@@ -264,6 +296,14 @@
           left: 12,
           total: 30,
           warn: false,
+        },
+        {
+          name: "이영표",
+          gender: "m",
+          info: "미등록 회원",
+          left: 0,
+          total: 0,
+          isUnregistered: true,
         },
         {
           name: "정하늘",
@@ -289,6 +329,13 @@
       }
 
       const actions = {
+        scrollToTop: () => {
+          const el =
+            scrollTopTarget || document.getElementById("scroll-container");
+          if (el) el.scrollTo({ top: 0, behavior: "smooth" });
+          const btn = document.getElementById("scroll-top-btn");
+          if (btn) btn.style.display = "none";
+        },
         goSchedule: () => set({ screen: "schedule", sheet: null }),
         goMembers: () => set({ screen: "members", sheet: null }),
         goProfile: () => set({ screen: "profile", sheet: null }),
@@ -305,7 +352,18 @@
               state.recordFrom === "memberDetail" ? "memberDetail" : "schedule",
           }),
 
-        openMember: () => set({ screen: "memberDetail", segment: "diary" }),
+        openMember: () =>
+          set({
+            screen: "memberDetail",
+            selectedMemberName: "김민지",
+            segment: "home",
+          }),
+        openMemberWithName: (name) =>
+          set({
+            screen: "memberDetail",
+            selectedMemberName: name,
+            segment: "home",
+          }),
         backMember: () => set({ screen: "members" }),
 
         openExercise: () => set({ screen: "exerciseGraph" }),
@@ -321,7 +379,156 @@
         openEditSheet: () => set({ sheet: "edit" }),
         openLoadRoutineSheet: () => set({ sheet: "loadRoutine" }),
         closeSheet: () => set({ sheet: null }),
+        toggleSpeedDial: () => set({ showSpeedDial: !state.showSpeedDial }),
+        closeSpeedDial: () => set({ showSpeedDial: false }),
+        openMonthlyCalendar: () =>
+          set({
+            sheet: "monthlyCalendar",
+            calendarYear: 2026,
+            calendarMonth: 7,
+          }),
+        prevMonth: () => {
+          let m = state.calendarMonth - 1;
+          let y = state.calendarYear;
+          if (m < 1) {
+            m = 12;
+            y -= 1;
+          }
+          set({ calendarYear: y, calendarMonth: m });
+        },
+        nextMonth: () => {
+          let m = state.calendarMonth + 1;
+          let y = state.calendarYear;
+          if (m > 12) {
+            m = 1;
+            y += 1;
+          }
+          set({ calendarYear: y, calendarMonth: m });
+        },
+        setMemberFilter: (filter) => set({ memberFilter: filter }),
+        actionSchedule: () =>
+          set({
+            showSpeedDial: false,
+            sheet: "schedule",
+            scheduleParts: ["하체"],
+            otherSchedulePart: "",
+            scheduleType: "session",
+            consultantName: "",
+            consultMemo: "",
+          }),
+        actionMember: () => set({ showSpeedDial: false, sheet: "member" }),
+        actionRecord: () => set({ showSpeedDial: false, screen: "record" }),
+        actionRoutine: () =>
+          set({ showSpeedDial: false, screen: "myRoutines" }),
+        setScheduleType: (type) => set({ scheduleType: type }),
+        confirmSchedule: () => {
+          const date = state.scheduleDate;
+          if (!scheduleData[date]) {
+            scheduleData[date] = { weekday: "화", sessions: [] };
+          }
 
+          if (state.scheduleType === "consult") {
+            const cName = state.consultantName || "비회원";
+            scheduleData[date].sessions.push({
+              time: "10:00",
+              name: cName,
+              tags: ["상담"],
+              memo: state.consultMemo,
+            });
+            // 미등록회원으로 회원 리스트에 존재하지 않으면 추가
+            const exist = allMembers.find((m) => m.name === cName);
+            if (!exist) {
+              allMembers.push({
+                name: cName,
+                gender: "m",
+                info: "미등록 회원",
+                left: 0,
+                total: 0,
+                isUnregistered: true,
+                consultMemo: state.consultMemo,
+                consultPurpose: "",
+              });
+            }
+          } else {
+            const tags = [...state.scheduleParts];
+            const etcIdx = tags.indexOf("기타");
+            if (etcIdx !== -1 && state.otherSchedulePart) {
+              tags[etcIdx] = `기타: ${state.otherSchedulePart}`;
+            }
+            scheduleData[date].sessions.push({
+              time: "10:00",
+              name: "김민지",
+              tags: tags,
+            });
+          }
+
+          set({
+            sheet: null,
+            scheduleParts: [],
+            otherSchedulePart: "",
+            scheduleType: "session",
+            consultantName: "",
+            consultMemo: "",
+          });
+        },
+        openConsultDetailWithName: (name) => {
+          let memo = "";
+          let purpose = "";
+          if (name === "박지성") {
+            memo = "다이어트 목적, 과거 무릎 부상 이력 있음. 주 2회 상담.";
+            purpose = "다이어트 및 재활";
+          } else if (name === "이영표") {
+            memo = "기초 체력 향상 원함. 주 3회 세션 가능 시간 문의.";
+            purpose = "체력 증진";
+          }
+          const memObj = allMembers.find((m) => m.name === name);
+          if (memObj) {
+            if (memObj.consultMemo) memo = memObj.consultMemo;
+            if (memObj.consultPurpose) purpose = memObj.consultPurpose;
+          }
+          set({
+            screen: "consultDetail",
+            consultTargetName: name,
+            consultTargetMemo: memo,
+            consultTargetPurpose: purpose,
+            recordFrom: state.screen,
+          });
+        },
+        backConsultDetail: () => {
+          set({
+            screen: state.recordFrom === "members" ? "members" : "schedule",
+          });
+        },
+        completeConsult: () => {
+          const memObj = allMembers.find(
+            (m) => m.name === state.consultTargetName,
+          );
+          if (memObj) {
+            memObj.consultMemo = state.consultTargetMemo;
+            memObj.consultPurpose = state.consultTargetPurpose;
+          }
+          set({
+            screen: state.recordFrom === "members" ? "members" : "schedule",
+          });
+        },
+        registerUnregisteredMember: (name) => {
+          const member = allMembers.find((m) => m.name === name);
+          if (member) {
+            member.isUnregistered = false;
+            member.info = "주 2회";
+            member.left = 10;
+            member.total = 10;
+            member.warn = false;
+          }
+          set({
+            screen: "memberDetail",
+            selectedMemberName: name,
+            segment: "home",
+          });
+        },
+
+        toggleMemo: () => set({ memoOpen: !state.memoOpen }),
+        setHome: () => set({ segment: "home" }),
         setDiary: () => set({ segment: "diary" }),
         setGraph: () => set({ segment: "graph" }),
         setExercise: () => set({ segment: "exercise" }),
@@ -437,6 +644,9 @@
       function dispatch(name) {
         if (actions[name]) {
           actions[name]();
+        } else if (name.startsWith("openMember:")) {
+          const mName = name.split(":")[1];
+          actions.openMemberWithName(mName);
         } else if (name.startsWith("selectDateFromGraph:")) {
           const d = name.split(":")[1];
           set({ selectedDate: d });
@@ -454,6 +664,16 @@
           set({ bodyPeriod: p, selectedBodyDate: "7.10" });
         } else if (name.startsWith("selectBodyDate:")) {
           set({ selectedBodyDate: name.split(":")[1] });
+        } else if (name.startsWith("openConsultDetail:")) {
+          actions.openConsultDetailWithName(name.split(":")[1]);
+        } else if (name.startsWith("registerUnregisteredMember:")) {
+          actions.registerUnregisteredMember(name.split(":")[1]);
+        } else if (name.startsWith("setMemberFilter:")) {
+          actions.setMemberFilter(name.split(":")[1]);
+        } else if (name.startsWith("selectScheduleDateAndClose:")) {
+          set({ scheduleDate: name.split(":")[1], sheet: null });
+        } else if (name.startsWith("setScheduleType:")) {
+          set({ scheduleType: name.split(":")[1] });
         } else if (name.startsWith("selectScheduleDate:")) {
           set({ scheduleDate: name.split(":")[1] });
         } else if (name.startsWith("addSet:")) {
@@ -465,6 +685,8 @@
           toggleExerciseExtra(name.split(":")[1]);
         } else if (name.startsWith("loadRoutine:")) {
           loadRoutineIntoRecord(name.split(":")[1]);
+        } else if (name.startsWith("setExerciseTabPart:")) {
+          set({ exerciseTabPart: name.slice("setExerciseTabPart:".length) });
         } else if (name.startsWith("setExercisePickerPart:")) {
           state.exercisePicker.part = name.slice(
             "setExercisePickerPart:".length,
@@ -562,15 +784,26 @@
           })
           .join("");
 
+        function getTagStyle(t) {
+          if (t === "상담") {
+            return "font-size:11px;font-weight:600;color:#1B64DA;background:#E8F3FF;padding:4px 8px;border-radius:6px";
+          }
+          if (t === "기타" || t.startsWith("기타:")) {
+            return "font-size:11px;font-weight:600;color:#4E5968;background:#E5E8EB;padding:4px 8px;border-radius:6px";
+          }
+          return "font-size:11px;font-weight:600;color:#6B7684;background:#F2F4F6;padding:4px 8px;border-radius:6px";
+        }
+
         function card(s) {
           const tagsHtml = s.tags
-            .map(
-              (t) =>
-                `<span style="font-size:11px;font-weight:600;color:#4E5968;background:#F2F4F6;padding:4px 8px;border-radius:6px">${t}</span>`,
-            )
+            .map((t) => `<span style="${getTagStyle(t)}">${t}</span>`)
             .join("");
+          const isConsult = s.tags.includes("상담");
+          const clickAction = isConsult
+            ? `openConsultDetail:${s.name}`
+            : `openRecord`;
           return `
-    <div data-action="openRecord" style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:16px">
+    <div data-action="${clickAction}" style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:16px">
       <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28;width:64px">${s.time}</span>
       <div style="flex:1;display:flex;flex-direction:column;gap:6px"><span style="font-size:16px;font-weight:700;color:#191F28">${s.name}</span><div style="display:flex;gap:4px">${tagsHtml}</div></div>
     </div>`;
@@ -608,22 +841,21 @@
         return `
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
     <div id="scroll-container" class="no-scrollbar" style="flex:1;overflow-y:auto;display:flex;flex-direction:column">
-      <div style="padding:52px 24px 0;display:flex;align-items:flex-end;justify-content:space-between">
+      <div style="padding:20px 24px 0;display:flex;align-items:flex-end;justify-content:space-between">
         <div style="display:flex;align-items:baseline;gap:10px">
           <span style="font-size:44px;font-weight:800;color:#191F28;letter-spacing:-1.5px">${state.scheduleDate}</span>
           <span style="font-size:20px;font-weight:600;color:#191F28">${current.weekday}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px">
           <span data-action="resetToday" style="font-size:13px;font-weight:600;color:#4E5968;background:#FFFFFF;padding:7px 14px;border-radius:999px">오늘</span>
-          <span style="width:32px;height:32px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;color:#4E5968;font-size:11px">▾</span>
+          <span data-action="openMonthlyCalendar" style="width:32px;height:32px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;color:#4E5968;font-size:11px;cursor:pointer">▾</span>
         </div>
       </div>
-      <div style="position:sticky;top:0;z-index:5;background:#F0F2F5;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:16px 20px 10px">${daysHtml}</div>
-      <div style="padding:0 20px 88px;display:flex;flex-direction:column;gap:8px">
+      <div style="position:sticky;top:0;z-index:5;background:#f2f4f6;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:16px 20px 10px">${daysHtml}</div>
+      <div style="padding:0 20px 140px;display:flex;flex-direction:column;gap:8px">
         ${listHtml}
       </div>
     </div>
-    <div data-action="openScheduleSheet" style="position:absolute;right:20px;bottom:16px;width:56px;height:56px;border-radius:999px;background:#FF4E00;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(255,78,0,.36)"><span style="color:#fff;font-size:26px;font-weight:300;line-height:1">+</span></div>
   </div>`;
       }
 
@@ -632,7 +864,8 @@
         const rot = ex.extraOpen ? "90deg" : "0deg";
         const showDelete = ex.sets.length > 1;
         const type = ex.type || "weight";
-        const gridCols = type === "weight" ? "28px 1fr 1fr 24px" : "28px 1fr 24px";
+        const gridCols =
+          type === "weight" ? "28px 1fr 1fr 24px" : "28px 1fr 24px";
 
         const headerCells =
           type === "weight"
@@ -731,8 +964,13 @@
         return `
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
     ${menuClickAway}
-    <div style="padding:56px 20px 12px;display:flex;align-items:center;gap:12px">
-      <span data-action="backRecord" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#191F28;font-size:18px">‹</span>
+    <div style="padding:20px 20px 12px;display:flex;align-items:center;gap:12px">
+      <span data-action="backRecord" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg viewBox="0 0 24 24" style="width:22px;height:22px" fill="none" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </span>
       <span style="font-size:16px;font-weight:700;color:#191F28">김민지 <span style="color:#4E5968;font-weight:500">· 12회차</span></span>
     </div>
     <div id="scroll-container" style="flex:1;overflow:auto;padding:4px 20px 12px;display:flex;flex-direction:column;gap:10px">
@@ -753,10 +991,61 @@
   </div>`;
       }
 
+      function renderConsultDetail() {
+        const member = allMembers.find(
+          (m) => m.name === state.consultTargetName,
+        );
+        const hasRecord = !!(
+          member &&
+          (member.consultMemo || member.consultPurpose)
+        );
+        const registerBtn =
+          member && member.isUnregistered && hasRecord
+            ? `
+            <div data-action="registerUnregisteredMember:${state.consultTargetName}" style="background:#FFFFFF;border-radius:14px;padding:17px 0;text-align:center;cursor:pointer;margin-bottom:12px;border:1.5px solid #FF4E00;box-shadow:0 4px 12px rgba(25,31,40,0.04)">
+              <span style="color:#FF4E00;font-size:16px;font-weight:700">회원으로 등록</span>
+            </div>`
+            : "";
+        return `
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative">
+    <div style="padding:20px 20px 12px;display:flex;align-items:center;gap:12px">
+      <span data-action="backConsultDetail" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg viewBox="0 0 24 24" style="width:22px;height:22px" fill="none" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </span>
+      <span style="font-size:16px;font-weight:700;color:#191F28">상담 기록 <span style="color:#4E5968;font-weight:500">· ${state.consultTargetName}</span></span>
+    </div>
+    <div id="scroll-container" style="flex:1;overflow:auto;padding:4px 20px 12px;display:flex;flex-direction:column;gap:12px">
+      <div style="background:#FFFFFF;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:14px;font-weight:700;color:#191F28">방문 목적</span>
+        <input type="text" placeholder="예: 체중 감량, 재활 등" value="${state.consultTargetPurpose || ""}" oninput="state.consultTargetPurpose = this.value" style="width:100%;border:none;background:#F2F4F6;border-radius:10px;padding:12px 16px;font-size:14px;color:#191F28;outline:none" />
+      </div>
+      <div style="background:#FFFFFF;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:14px;font-weight:700;color:#191F28">상담 특이사항 및 메모</span>
+        <textarea placeholder="과거 부상 부위, 운동 경험, 회원님 요구사항 등 상세 메모" oninput="state.consultTargetMemo = this.value" style="width:100%;height:140px;border:none;background:#F2F4F6;border-radius:10px;padding:12px 16px;font-size:14px;color:#191F28;outline:none;resize:none">${state.consultTargetMemo || ""}</textarea>
+      </div>
+    </div>
+    <div style="padding:12px 20px 32px">
+      ${registerBtn}
+      <div data-action="completeConsult" style="background:#FF4E00;border-radius:14px;padding:17px 0;text-align:center;box-shadow:0 6px 16px rgba(255,78,0,.3);cursor:pointer"><span style="color:#fff;font-size:16px;font-weight:700">기록 완료</span></div>
+    </div>
+  </div>`;
+      }
+
       /* ---------------- 회원 목록 ---------------- */
       function renderMembers() {
         const members = allMembers
-          .filter((m) => state.gender === "all" || m.gender === state.gender)
+          .filter((m) => {
+            const genderOk =
+              state.gender === "all" || m.gender === state.gender;
+            const statusOk =
+              state.memberFilter === "unregistered"
+                ? m.isUnregistered
+                : !m.isUnregistered;
+            return genderOk && statusOk;
+          })
           .map((m) => ({
             ...m,
             initial: m.name[0],
@@ -768,14 +1057,23 @@
           }));
 
         const rows = members
-          .map(
-            (m) => `
-    <div data-action="openMember" style="background:#FFFFFF;border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px">
+          .map((m) => {
+            const countHtml = m.isUnregistered
+              ? `<span style="font-size:13px;font-weight:600;color:#8B95A1">미등록</span>`
+              : `<span style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:${m.leftColor}">${m.leftStr}<span style="font-size:13px;font-weight:500;color:#8B95A1">${m.totalStr}</span></span>`;
+            const clickAction = m.isUnregistered
+              ? `openConsultDetail:${m.name}`
+              : `openMember:${m.name}`;
+            const infoHtml = m.isUnregistered
+              ? ""
+              : `<span style="font-size:12px;color:#8B95A1">${m.info}</span>`;
+            return `
+    <div data-action="${clickAction}" style="background:#FFFFFF;border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;min-height:76px">
       <span style="width:44px;height:44px;border-radius:999px;background:${m.avBg};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:${m.avFg};flex-shrink:0">${m.initial}</span>
-      <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:700;color:#191F28">${m.name}</span><span style="font-size:12px;color:#8B95A1">${m.info}</span></div>
-      <span style="font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:${m.leftColor}">${m.leftStr}<span style="font-size:13px;font-weight:500;color:#8B95A1">${m.totalStr}</span></span>
-    </div>`,
-          )
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:2px"><span style="font-size:17px;font-weight:700;color:#191F28">${m.name}</span>${infoHtml}</div>
+      ${countHtml}
+    </div>`;
+          })
           .join("");
 
         return `
@@ -785,14 +1083,22 @@
         <span style="width:14px;height:14px;border-radius:999px;border:2px solid #8B95A1;position:relative;flex-shrink:0"><span style="position:absolute;width:2px;height:6px;background:#8B95A1;bottom:-4px;right:-2px;transform:rotate(-45deg);border-radius:2px"></span></span>
         <span style="font-size:14px;color:#8B95A1">회원 이름 검색</span>
       </div>
-      <div style="display:flex;gap:8px">
-        <span data-action="setGenderAll" style="font-size:13px;padding:8px 16px;border-radius:999px;${gchip(state.gender === "all")}">전체</span>
-        <span data-action="setGenderM" style="font-size:13px;padding:8px 16px;border-radius:999px;${gchip(state.gender === "m")}">남</span>
-        <span data-action="setGenderF" style="font-size:13px;padding:8px 16px;border-radius:999px;${gchip(state.gender === "f")}">여</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="display:flex;gap:6px;flex:1">
+          <span data-action="setMemberFilter:registered" style="font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;${gchip(state.memberFilter === "registered")}">등록 회원</span>
+          <span data-action="setMemberFilter:unregistered" style="font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;${gchip(state.memberFilter === "unregistered")}">미등록 회원</span>
+        </div>
+        <select onchange="dispatch(this.value)" style="border:1.5px solid #EFF2F5;background:#FFFFFF;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:#4E5968;outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;text-align:center">
+          <option value="setGenderAll" ${state.gender === "all" ? "selected" : ""}>성별 전체 ▾</option>
+          <option value="setGenderM" ${state.gender === "m" ? "selected" : ""}>남성 ▾</option>
+          <option value="setGenderF" ${state.gender === "f" ? "selected" : ""}>여성 ▾</option>
+        </select>
       </div>
     </div>
-    <div style="flex:1;overflow:auto;padding:16px 20px 12px;display:flex;flex-direction:column;gap:8px">${rows}</div>
-    <div data-action="openMemberSheet" style="position:absolute;right:20px;bottom:16px;width:56px;height:56px;border-radius:999px;background:#FF4E00;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(255,78,0,.36)"><span style="color:#fff;font-size:26px;font-weight:300;line-height:1">+</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px 2px">
+      <span style="font-size:13px;font-weight:700;color:#8B95A1">${members.length}명</span>
+    </div>
+    <div style="flex:1;overflow:auto;padding:4px 20px 140px;display:flex;flex-direction:column;gap:8px">${rows}</div>
   </div>`;
       }
 
@@ -819,74 +1125,245 @@
     </div>`;
       }
 
+      function renderHomeTab() {
+        const member =
+          allMembers.find((m) => m.name === state.selectedMemberName) || {};
+        const purpose = member.consultPurpose || "근력 증진 및 체질 개선";
+        const memo =
+          member.consultMemo ||
+          "오른쪽 무릎 슬개골 연골 연화증 이력 있음. 런지 등 무릎 굽힘 각도가 깊은 하체 프레스 시 통증 피드백 필요.";
+
+        const nameVal = member.name || state.selectedMemberName || "회원";
+        const genderText = member.gender === "m" ? "남성" : "여성";
+        const genderBg = member.gender === "m" ? "#E8F3FF" : "#FFE9E0";
+        const genderColor = member.gender === "m" ? "#1B64DA" : "#E63E00";
+
+        const left = member.left || 7;
+        const total = member.total || 20;
+        const done = total - left; // 진행한 회차
+        const donePct = Math.round((done / total) * 100);
+
+        return `
+    <div style="flex:1;overflow:auto;padding:12px 20px 140px;display:flex;flex-direction:column;gap:16px">
+      <!-- 히어로: 프로필 (카드 없이 플랫) -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 2px 14px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:26px;font-weight:800;color:#191F28;letter-spacing:-0.3px">${nameVal}</span>
+          <span style="background:${genderBg};color:${genderColor};font-size:13px;font-weight:700;padding:3px 9px;border-radius:6px">${genderText}</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <span data-action="openEditSheet" style="width:40px;height:40px;border-radius:999px;background:#FFFFFF;border:1px solid #EFF2F5;display:flex;align-items:center;justify-content:center;cursor:pointer">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px" fill="none" stroke="#4E5968" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+          </span>
+          <span style="width:40px;height:40px;border-radius:999px;background:#FFFFFF;border:1px solid #EFF2F5;display:flex;align-items:center;justify-content:center;cursor:pointer">
+            <svg viewBox="0 0 24 24" style="width:18px;height:18px" fill="none" stroke="#4E5968" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"></line><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"></line></svg>
+          </span>
+        </div>
+      </div>
+
+      <!-- 세션 통합 카드: 제목 + 진행 횟수 + 이전/다음 -->
+      <div style="background:#FFFFFF;border-radius:24px;padding:28px 24px;box-shadow:0 2px 8px rgba(25,31,40,0.04);display:flex;flex-direction:column;gap:26px">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:16px;font-weight:600;color:#6B7684">수업</span>
+            <span style="font-size:22px;font-weight:800;color:#FF4E00;font-variant-numeric:tabular-nums">${done}<span style="font-size:14px;color:#8B95A1;font-weight:600"> / ${total}회 진행</span></span>
+          </div>
+          <div style="height:6px;border-radius:99px;background:#F2F4F6;overflow:hidden">
+            <div style="width:${donePct}%;height:100%;border-radius:99px;background:#FF4E00"></div>
+          </div>
+        </div>
+        <!-- 박스 안에 박스: 이전/다음 수업 -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div data-action="setDiary" style="background:#F5F6F8;border-radius:18px;padding:20px 18px;display:flex;flex-direction:column;gap:10px;cursor:pointer">
+            <span style="font-size:14px;color:#8B95A1">이전 수업</span>
+            <span style="font-size:17px;font-weight:700;color:#191F28;line-height:1.3">스쿼트 외 2</span>
+            <span style="font-size:13px;color:#8B95A1;font-variant-numeric:tabular-nums">${done}회차 · 7.10</span>
+          </div>
+          <div data-action="setRoutine" style="background:#F5F6F8;border-radius:18px;padding:20px 18px;display:flex;flex-direction:column;gap:10px;cursor:pointer">
+            <span style="font-size:14px;font-weight:600;background:linear-gradient(90deg,#FF8A3D,#FF4E00);-webkit-background-clip:text;background-clip:text;color:transparent">다음 수업</span>
+            <span style="font-size:17px;font-weight:700;color:#191F28;line-height:1.3">상체 기본 루틴</span>
+            <span style="font-size:13px;color:#8B95A1;font-variant-numeric:tabular-nums">${done + 1}회차 · 7.14 예정</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 신체 정보 카드: 박스 안에 박스 -->
+      <div data-action="setGraph" style="background:#FFFFFF;border-radius:24px;padding:28px 24px;box-shadow:0 2px 8px rgba(25,31,40,0.04);display:flex;flex-direction:column;gap:20px;cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:16px;font-weight:600;color:#6B7684">신체 정보</span>
+          <span style="font-size:14px;color:#8B95A1;font-variant-numeric:tabular-nums">7.10 측정</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div style="background:#F5F6F8;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;gap:10px">
+            <span style="font-size:14px;color:#8B95A1">체중</span>
+            <span style="font-size:17px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums;line-height:1.3">56.4<span style="font-size:13px;font-weight:500;color:#8B95A1"> kg</span></span>
+          </div>
+          <div style="background:#F5F6F8;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;gap:10px">
+            <span style="font-size:14px;color:#8B95A1">골격근량</span>
+            <span style="font-size:17px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums;line-height:1.3">22.8<span style="font-size:13px;font-weight:500;color:#8B95A1"> kg</span></span>
+          </div>
+          <div style="background:#F5F6F8;border-radius:18px;padding:18px 14px;display:flex;flex-direction:column;gap:10px">
+            <span style="font-size:14px;color:#8B95A1">체지방률</span>
+            <span style="font-size:17px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums;line-height:1.3">28.5<span style="font-size:13px;font-weight:500;color:#8B95A1"> %</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 메모 카드: 기본 접힘, 탭하면 펼침 -->
+      <div style="background:#FFFFFF;border-radius:24px;padding:28px 24px;box-shadow:0 2px 8px rgba(25,31,40,0.04);display:flex;flex-direction:column;gap:${state.memoOpen ? "20px" : "14px"}">
+        <div data-action="toggleMemo" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+          <span style="font-size:16px;font-weight:600;color:#6B7684">메모</span>
+          <svg viewBox="0 0 24 24" style="width:20px;height:20px;transform:rotate(${state.memoOpen ? "180deg" : "0deg"});transition:transform 0.2s" fill="none" stroke="#B0B8C1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        ${
+          state.memoOpen
+            ? `
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#333D4B;margin-bottom:6px">운동 목표</div>
+          <div style="font-size:15px;color:#4E5968;line-height:1.6">${purpose}</div>
+        </div>
+        <div style="height:1px;background:#F2F4F6"></div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#333D4B;margin-bottom:6px">주의 및 특이사항</div>
+          <div style="font-size:15px;color:#4E5968;line-height:1.6">${memo}</div>
+        </div>`
+            : `
+        <div data-action="toggleMemo" style="font-size:15px;color:#8B95A1;line-height:1.5;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${purpose}</div>`
+        }
+      </div>
+    </div>`;
+      }
+
+      function diarySessionRow(date, rowsHtml, note) {
+        return `
+          <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;background:#FFFFFF">
+            <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:#8B95A1">${date}</span>
+            <div style="display:flex;flex-direction:column">${rowsHtml}</div>
+            <div style="font-size:14px;line-height:1.6;color:#4E5968;background:#F2F4F6;border-radius:10px;padding:12px 14px">${note}</div>
+          </div>`;
+      }
+
       function renderDiaryTab() {
-        const items = [];
+        const member =
+          allMembers.find((m) => m.name === state.selectedMemberName) || {};
+
+        let contentHtml = "";
+
         if (state.diaryFilter === "session") {
-          items.push(
-            diarySessionCard(
-              "7.10(금)",
+          // 7월 세션 데이터
+          const julyRows = [
+            diarySessionRow(
+              "7.10 금",
               diaryExerciseRow("스쿼트", diaryStatText(80, 5, 5)) +
                 diaryExerciseRow("레그프레스", diaryStatText(140, 8, 3)) +
                 diaryExerciseRow("런지", diaryStatText(16, 12, 3)),
               "스쿼트 깊이 좋아짐. 다음엔 85kg 시도. 무릎 정렬 계속 체크.",
             ),
-          );
-        }
-        if (state.diaryFilter === "body") {
-          items.push(`
-    <div style="background:#FFFFFF;border-radius:14px;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:#8B95A1">7.8(수)</span>
-      </div>
-      <div style="display:flex;gap:8px">
-        <span style="width:64px;height:64px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:ui-monospace,monospace;color:#8B95A1">img</span>
-        <span style="width:64px;height:64px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:ui-monospace,monospace;color:#8B95A1"> </span>
-      </div>
-    </div>`);
-        }
-        if (state.diaryFilter === "session") {
-          items.push(
-            diarySessionCard(
-              "7.7(화)",
+            diarySessionRow(
+              "7.7 화",
               diaryExerciseRow("랫풀다운", diaryStatText(45, 10, 3)) +
                 diaryExerciseRow("시티드 로우", diaryStatText(40, 8, 3)),
               "랫풀다운 자세 교정 위주로 진행. 광배근 자극 느끼기 시작함.",
             ),
-          );
-        }
-        if (state.diaryFilter === "diet") {
-          items.push(`
-    <div style="background:#FFFFFF;border-radius:14px;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;color:#8B95A1">7.6(월)</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="width:44px;height:44px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:ui-monospace,monospace;color:#8B95A1">img</span>
-        <span style="font-size:13px;color:#4E5968">닭가슴살 샐러드</span>
-      </div>
-    </div>`);
-        }
-        if (state.diaryFilter === "session") {
-          items.push(`
-    <div style="font-size:12px;font-weight:600;color:#8B95A1;padding:4px 4px 0">2026년 6월</div>
-    ${diarySessionCard(
-      "6.30(화)",
-      diaryExerciseRow("스쿼트", diaryStatText(75, 5, 5)) +
-        diaryExerciseRow("레그프레스", diaryStatText(120, 8, 3)) +
-        diaryExerciseRow("런지", diaryStatText(12, 12, 3)),
-      "컨디션 좋음. 스쿼트 75kg 안정적. 다음 세션 때 80kg 증량 도전.",
-    )}`);
+          ];
+
+          // 6월 세션 데이터
+          const juneRows = [
+            diarySessionRow(
+              "6.30 화",
+              diaryExerciseRow("스쿼트", diaryStatText(75, 5, 5)) +
+                diaryExerciseRow("레그프레스", diaryStatText(120, 8, 3)) +
+                diaryExerciseRow("런지", diaryStatText(12, 12, 3)),
+              "컨디션 좋음. 스쿼트 75kg 안정적. 다음 세션 때 80kg 증량 도전.",
+            ),
+          ];
+
+          if (member.consultPurpose || member.consultMemo) {
+            juneRows.push(`
+              <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;background:#FFFFFF">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="background:#E8F3FF;color:#1B64DA;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px">최초 방문 상담</span>
+                  <span style="font-size:14px;font-weight:600;color:#8B95A1">6.25 목</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="font-size:14px;font-weight:700;color:#191F28">방문 목적: ${member.consultPurpose}</div>
+                  <div style="font-size:12px;color:#4E5968;line-height:1.5">${member.consultMemo}</div>
+                </div>
+              </div>
+            `);
+          }
+
+          contentHtml = `
+            <div style="background:#FFFFFF;display:flex;flex-direction:column">
+              ${julyRows.join('<div style="height:1px;background:#F2F4F6;margin:0 20px"></div>')}
+            </div>
+            <div style="height:14px;width:100%"></div>
+            <div style="background:#FFFFFF;display:flex;flex-direction:column">
+              ${juneRows.join('<div style="height:1px;background:#F2F4F6;margin:0 20px"></div>')}
+            </div>
+          `;
+        } else if (state.diaryFilter === "body") {
+          const julyRows = [
+            `
+            <div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px;background:#FFFFFF">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:#8B95A1">7.8 수</span>
+              </div>
+              <div style="display:flex;gap:8px">
+                <span style="width:64px;height:64px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:ui-monospace,monospace;color:#8B95A1">img</span>
+                <span style="width:64px;height:64px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:ui-monospace,monospace;color:#8B95A1"> </span>
+              </div>
+            </div>`,
+          ];
+
+          contentHtml = `
+            <div style="background:#FFFFFF;display:flex;flex-direction:column">
+              ${julyRows.join('<div style="height:1px;background:#F2F4F6;margin:0 20px"></div>')}
+            </div>
+          `;
+        } else if (state.diaryFilter === "diet") {
+          const julyRows = [
+            `
+            <div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px;background:#FFFFFF">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:#8B95A1">7.6 월</span>
+              </div>
+              <div style="display:flex;gap:10px">
+                <span style="width:44px;height:44px;border-radius:10px;background:repeating-linear-gradient(45deg,#EFF2F5,#EFF2F5 6px,#E1E5EA 6px,#E1E5EA 12px);display:flex;align-items:center;justify-content:center;font-size:12px;font-family:ui-monospace,monospace;color:#8B95A1">img</span>
+                <span style="font-size:12px;color:#4E5968">닭가슴살 샐러드</span>
+              </div>
+            </div>`,
+          ];
+
+          contentHtml = `
+            <div style="background:#FFFFFF;display:flex;flex-direction:column">
+              ${julyRows.join('<div style="height:1px;background:#F2F4F6;margin:0 20px"></div>')}
+            </div>
+          `;
         }
 
         return `
-  <div style="flex:1;overflow:auto;padding:16px 20px 12px;display:flex;flex-direction:column;gap:8px">
-    <div style="display:flex;gap:6px;padding:0 2px">
-      <span data-action="setDiarySession" style="font-size:12px;padding:7px 14px;border-radius:999px;${dchip(state.diaryFilter === "session")}">수업</span>
-      <span data-action="setDiaryBody" style="font-size:12px;padding:7px 14px;border-radius:999px;${dchip(state.diaryFilter === "body")}">눈바디</span>
-      <span data-action="setDiaryDiet" style="font-size:12px;padding:7px 14px;border-radius:999px;${dchip(state.diaryFilter === "diet")}">식단</span>
-    </div>
-    ${items.join("")}
-  </div>`;
+          <div style="display:flex;width:100%;border-bottom:1px solid #E5E8EB;background:#FFFFFF;flex-shrink:0">
+            <div data-action="setDiarySession" style="flex:1;text-align:center;padding:12px 0;font-size:16px;cursor:pointer;position:relative;${state.diaryFilter === "session" ? "font-weight:700;color:#191F28" : "font-weight:500;color:#8B95A1"}">
+              수업
+              ${state.diaryFilter === "session" ? '<div style="position:absolute;bottom:-1px;left:0;right:0;height:2px;background:#191F28"></div>' : ""}
+            </div>
+            <div data-action="setDiaryBody" style="flex:1;text-align:center;padding:12px 0;font-size:16px;cursor:pointer;position:relative;${state.diaryFilter === "body" ? "font-weight:700;color:#191F28" : "font-weight:500;color:#8B95A1"}">
+              눈바디
+              ${state.diaryFilter === "body" ? '<div style="position:absolute;bottom:-1px;left:0;right:0;height:2px;background:#191F28"></div>' : ""}
+            </div>
+            <div data-action="setDiaryDiet" style="flex:1;text-align:center;padding:12px 0;font-size:16px;cursor:pointer;position:relative;${state.diaryFilter === "diet" ? "font-weight:700;color:#191F28" : "font-weight:500;color:#8B95A1"}">
+              식단
+              ${state.diaryFilter === "diet" ? '<div style="position:absolute;bottom:-1px;left:0;right:0;height:2px;background:#191F28"></div>' : ""}
+            </div>
+          </div>
+
+          <div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+            ${contentHtml}
+            <!-- 남는 영역 흰색 채움 + 플로팅 탭바 스크롤 여백 -->
+            <div style="flex:1;min-height:120px;background:#FFFFFF"></div>
+          </div>
+        `;
       }
 
       const bodyRecords = [
@@ -942,7 +1419,9 @@
         const N = filtered.length;
 
         // Find selected record (fall back to latest record)
-        let selectedRec = filtered.find((r) => r.date === state.selectedBodyDate);
+        let selectedRec = filtered.find(
+          (r) => r.date === state.selectedBodyDate,
+        );
         if (!selectedRec) {
           selectedRec = filtered[0];
         }
@@ -967,7 +1446,7 @@
           .map((r, i) => {
             const x = N > 1 ? xEnd - i * dx : (xStart + xEnd) / 2;
             const isSelected = r.date === selectedRec.date;
-            return `<text x="${x}" y="106" text-anchor="middle" font-size="10" font-family="-apple-system, BlinkMacSystemFont, sans-serif" fill="${isSelected ? "#191F28" : "#8B95A1"}" font-weight="${isSelected ? "700" : "500"}" font-variant-numeric="tabular-nums" style="cursor:pointer" data-action="selectBodyDate:${r.date}">${r.date}</text>`;
+            return `<text x="${x}" y="106" text-anchor="middle" font-size="12" font-family="-apple-system, BlinkMacSystemFont, sans-serif" fill="${isSelected ? "#191F28" : "#8B95A1"}" font-weight="${isSelected ? "700" : "500"}" font-variant-numeric="tabular-nums" style="cursor:pointer" data-action="selectBodyDate:${r.date}">${r.date}</text>`;
           })
           .join("");
 
@@ -1000,7 +1479,7 @@
   <div style="background:#FFFFFF;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px">
     <div style="display:flex;align-items:baseline;gap:8px">
       <span style="font-size:14px;font-weight:700;color:#191F28">${label}</span>
-      <span style="margin-left:auto;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${valToShow}<span style="font-size:13px;font-weight:500;color:#4E5968">${unit}</span></span>
+      <span style="margin-left:auto;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${valToShow}<span style="font-size:12px;font-weight:500;color:#4E5968">${unit}</span></span>
       <span style="font-size:12px;font-weight:700;color:#E63E00">${deltaStr}</span>
     </div>
     
@@ -1028,7 +1507,7 @@
 
       function renderGraphTab() {
         return `
-  <div style="flex:1;overflow:auto;padding:16px 20px 12px;display:flex;flex-direction:column;gap:8px">
+  <div style="flex:1;overflow:auto;padding:16px 20px 140px;display:flex;flex-direction:column;gap:8px">
     <!-- 기간 필터 칩 -->
     <div style="display:flex;gap:6px;padding:4px 2px 8px">
       <span data-action="setBodyPeriod:1m" style="font-size:12px;padding:6px 12px;border-radius:999px;cursor:pointer;${dchip(state.bodyPeriod === "1m")}">1개월</span>
@@ -1042,42 +1521,128 @@
   </div>`;
       }
 
-      function exerciseRow(name, date, points, color, kg) {
+      const memberExerciseRecords = [
+        {
+          name: "스쿼트",
+          part: "하체",
+          date: "7.10",
+          points: "2,16 14,14 26,15 38,10 50,8 62,4",
+          color: "#FF7A45",
+          kg: 80,
+        },
+        {
+          name: "레그프레스",
+          part: "하체",
+          date: "7.10",
+          points: "2,17 14,15 26,12 38,12 50,9 62,5",
+          color: "#FF7A45",
+          kg: 140,
+        },
+        {
+          name: "런지",
+          part: "하체",
+          date: "7.10",
+          points: "2,12 14,12 26,11 38,12 50,11 62,11",
+          color: "#B0B8C1",
+          kg: 16,
+        },
+        {
+          name: "랫풀다운",
+          part: "등",
+          date: "7.7",
+          points: "2,14 14,14 26,11 38,12 50,10 62,10",
+          color: "#B0B8C1",
+          kg: 45,
+        },
+        {
+          name: "시티드 로우",
+          part: "등",
+          date: "7.7",
+          points: "2,16 14,13 26,13 38,10 50,9 62,6",
+          color: "#FF7A45",
+          kg: 40,
+        },
+        {
+          name: "벤치프레스",
+          part: "가슴어깨",
+          date: "7.3",
+          points: "2,17 14,14 26,13 38,11 50,8 62,7",
+          color: "#FF7A45",
+          kg: 40,
+        },
+      ];
+
+      function exerciseRow(r) {
         return `
-  <div data-action="openExercise" style="background:#FFFFFF;border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:12px">
-    <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:700;color:#191F28">${name}</span><span style="font-size:12px;color:#8B95A1">${date} 수행</span></div>
-    <svg viewBox="0 0 64 20" style="width:64px;height:20px"><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"></polyline></svg>
-    <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${kg}<span style="font-size:12px;font-weight:500;color:#8B95A1">kg</span></span>
+  <div data-action="openExercise" style="padding:15px 20px;display:flex;align-items:center;gap:12px;cursor:pointer">
+    <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:700;color:#191F28">${r.name}</span><span style="font-size:12px;color:#8B95A1">${r.date} 수행</span></div>
+    <svg viewBox="0 0 64 20" style="width:64px;height:20px"><polyline points="${r.points}" fill="none" stroke="${r.color}" stroke-width="2" stroke-linecap="round"></polyline></svg>
+    <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${r.kg}<span style="font-size:12px;font-weight:500;color:#8B95A1">kg</span></span>
   </div>`;
       }
 
       function renderExerciseTab() {
+        const activePart = state.exerciseTabPart;
+        const filtered =
+          activePart === "전체"
+            ? memberExerciseRecords
+            : memberExerciseRecords.filter((r) => r.part === activePart);
+
+        // 부위별 그룹핑 (원본 순서 유지)
+        const groups = [];
+        filtered.forEach((r) => {
+          let g = groups.find((g) => g.part === r.part);
+          if (!g) {
+            g = { part: r.part, rows: [] };
+            groups.push(g);
+          }
+          g.rows.push(r);
+        });
+
+        const chipsHtml = exerciseParts
+          .map(
+            (p) =>
+              `<span data-action="setExerciseTabPart:${p}" style="font-size:13px;padding:7px 14px;border-radius:999px;cursor:pointer;white-space:nowrap;${dchip(activePart === p)}">${p}</span>`,
+          )
+          .join("");
+
+        const groupsHtml = groups
+          .map(
+            (g) => `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:13px;font-weight:600;color:#8B95A1;padding:0 4px">${g.part}</div>
+      <div style="background:#FFFFFF;border-radius:16px;box-shadow:0 2px 8px rgba(25,31,40,0.04);display:flex;flex-direction:column">
+        ${g.rows.map(exerciseRow).join('<div style="height:1px;background:#F2F4F6;margin:0 20px"></div>')}
+      </div>
+    </div>`,
+          )
+          .join("");
+
         return `
-  <div style="flex:1;overflow:auto;padding:16px 20px 12px;display:flex;flex-direction:column;gap:8px">
-    <div style="font-size:12px;font-weight:600;color:#8B95A1;padding:4px 4px 0">하체</div>
-    ${exerciseRow("스쿼트", "7.10", "2,16 14,14 26,15 38,10 50,8 62,4", "#FF7A45", 80)}
-    ${exerciseRow("레그프레스", "7.10", "2,17 14,15 26,12 38,12 50,9 62,5", "#FF7A45", 140)}
-    ${exerciseRow("런지", "7.10", "2,12 14,12 26,11 38,12 50,11 62,11", "#B0B8C1", 16)}
-    <div style="font-size:12px;font-weight:600;color:#8B95A1;padding:8px 4px 0">등</div>
-    ${exerciseRow("랫풀다운", "7.7", "2,14 14,14 26,11 38,12 50,10 62,10", "#B0B8C1", 45)}
-    ${exerciseRow("시티드 로우", "7.7", "2,16 14,13 26,13 38,10 50,9 62,6", "#FF7A45", 40)}
-    <div style="font-size:12px;font-weight:600;color:#8B95A1;padding:8px 4px 0">가슴</div>
-    ${exerciseRow("벤치프레스", "7.3", "2,17 14,14 26,13 38,11 50,8 62,7", "#FF7A45", 40)}
+  <div style="padding:0 20px 12px;display:flex;flex-direction:column;gap:10px;flex-shrink:0">
+    <div style="background:#FFFFFF;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;border:1px solid #EFF2F5">
+      <span style="width:14px;height:14px;border-radius:999px;border:2px solid #B0B8C1;position:relative;flex-shrink:0"><span style="position:absolute;width:2px;height:6px;background:#B0B8C1;bottom:-4px;right:-2px;transform:rotate(-45deg);border-radius:2px"></span></span>
+      <span style="font-size:14px;color:#8B95A1">운동 이름 검색</span>
+    </div>
+    <div class="no-scrollbar" style="display:flex;gap:6px;overflow-x:auto">${chipsHtml}</div>
+  </div>
+  <div style="flex:1;overflow:auto;padding:4px 20px 140px;display:flex;flex-direction:column;gap:20px">
+    ${groupsHtml}
   </div>`;
       }
 
       function renderRoutineTab() {
         return `
-  <div style="flex:1;overflow:auto;padding:16px 20px 12px;display:flex;flex-direction:column;gap:8px">
+  <div style="flex:1;overflow:auto;padding:16px 20px 140px;display:flex;flex-direction:column;gap:8px">
     <div style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
       <div style="display:flex;align-items:baseline;gap:10px">
         <span style="font-size:16px;font-weight:700;color:#191F28">하체 A</span>
         <span style="margin-left:auto;font-size:14px;color:#8B95A1">✎</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">스쿼트</span><span style="font-size:13px;color:#4E5968;font-variant-numeric:tabular-nums">80kg · 5회 × 3세트</span></div>
-        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">레그프레스</span><span style="font-size:13px;color:#4E5968;font-variant-numeric:tabular-nums">140kg · 8회 × 3세트</span></div>
-        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">런지</span><span style="font-size:13px;color:#4E5968;font-variant-numeric:tabular-nums">16kg · 12회 × 3세트</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">스쿼트</span><span style="font-size:14px;color:#4E5968;font-variant-numeric:tabular-nums">80kg · 5회 × 3세트</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">레그프레스</span><span style="font-size:14px;color:#4E5968;font-variant-numeric:tabular-nums">140kg · 8회 × 3세트</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">런지</span><span style="font-size:14px;color:#4E5968;font-variant-numeric:tabular-nums">16kg · 12회 × 3세트</span></div>
       </div>
     </div>
     <div style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
@@ -1086,42 +1651,72 @@
         <span style="margin-left:auto;font-size:14px;color:#8B95A1">✎</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">벤치프레스</span><span style="font-size:13px;color:#4E5968;font-variant-numeric:tabular-nums">40kg · 8회 × 3세트</span></div>
-        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">랫풀다운</span><span style="font-size:13px;color:#4E5968;font-variant-numeric:tabular-nums">45kg · 10회 × 3세트</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">벤치프레스</span><span style="font-size:14px;color:#4E5968;font-variant-numeric:tabular-nums">40kg · 8회 × 3세트</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="flex:1;font-size:14px;font-weight:600;color:#191F28">랫풀다운</span><span style="font-size:14px;color:#4E5968;font-variant-numeric:tabular-nums">45kg · 10회 × 3세트</span></div>
       </div>
     </div>
-    <div data-action="openRoutineSheet" style="border-radius:14px;padding:16px 20px;text-align:center;background:#FFE9E0"><span style="font-size:14px;font-weight:700;color:#E63E00">+ 루틴 추가</span></div>
+    <div data-action="openRoutineSheet" style="background:#FFFFFF;border-radius:16px;padding:22px 0;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(25,31,40,0.04)">
+      <span style="font-size:16px;font-weight:600;color:#333D4B">＋ 루틴 추가하기</span>
+    </div>
   </div>`;
       }
 
       function renderMemberDetail() {
-        const body =
+        const isDetail = state.segment === "graph";
+        const bgStyle = "background:#f6f7f9;";
+
+        const segmentLabel =
           state.segment === "diary"
-            ? renderDiaryTab()
-            : state.segment === "graph"
-              ? renderGraphTab()
-              : state.segment === "exercise"
-                ? renderExerciseTab()
-                : renderRoutineTab();
+            ? "일지"
+            : state.segment === "exercise"
+              ? "운동"
+              : state.segment === "routine"
+                ? "루틴"
+                : "";
+
+        let headerHtml = "";
+        if (isDetail) {
+          headerHtml = `
+            <div style="display:flex;align-items:center;gap:12px;padding:20px 20px 12px">
+              <span data-action="setHome" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+                <svg viewBox="0 0 24 24" style="width:22px;height:22px" fill="none" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </span>
+              <span style="font-size:17px;font-weight:600;color:#333D4B">신체 기록</span>
+            </div>
+          `;
+        } else if (segmentLabel) {
+          // 일지 탭은 흰색 필터 탭 바와 한 덩어리로 보이도록 헤더도 흰색 처리
+          const headerBg =
+            state.segment === "diary" ? "background:#FFFFFF;" : "";
+          headerHtml = `
+            <div style="display:flex;align-items:baseline;gap:8px;padding:20px 20px 14px;flex-shrink:0;${headerBg}">
+              <span style="font-size:17px;font-weight:700;color:#191F28">${state.selectedMemberName}</span>
+              <span style="font-size:13px;font-weight:500;color:#8B95A1">${segmentLabel}</span>
+            </div>
+          `;
+        } else {
+          headerHtml = `
+            <div style="height:20px;flex-shrink:0"></div>
+          `;
+        }
+
+        const body =
+          state.segment === "home"
+            ? renderHomeTab()
+            : state.segment === "diary"
+              ? renderDiaryTab()
+              : state.segment === "graph"
+                ? renderGraphTab()
+                : state.segment === "exercise"
+                  ? renderExerciseTab()
+                  : renderRoutineTab();
 
         return `
-  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:56px 20px 0;display:flex;flex-direction:column;gap:14px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span data-action="backMember" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#191F28;font-size:18px">‹</span>
-        <span style="flex:1;font-size:20px;font-weight:700;color:#191F28">김민지 <span style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#4E5968">7/20</span></span>
-        <span data-action="openEditSheet" style="width:36px;height:36px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:14px;color:#4E5968">✎</span>
-        <span style="width:36px;height:36px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center">
-          <svg viewBox="0 0 16 16" style="width:15px;height:15px"><circle cx="12.5" cy="3.5" r="2" fill="none" stroke="#4E5968" stroke-width="1.5"></circle><circle cx="3.5" cy="8" r="2" fill="none" stroke="#4E5968" stroke-width="1.5"></circle><circle cx="12.5" cy="12.5" r="2" fill="none" stroke="#4E5968" stroke-width="1.5"></circle><line x1="5.3" y1="7.1" x2="10.7" y2="4.4" stroke="#4E5968" stroke-width="1.5"></line><line x1="5.3" y1="8.9" x2="10.7" y2="11.6" stroke="#4E5968" stroke-width="1.5"></line></svg>
-        </span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#E5E8EB;border-radius:14px;padding:4px">
-        <span data-action="setDiary" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;${segStyle(state.segment === "diary")}">일지</span>
-        <span data-action="setGraph" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;${segStyle(state.segment === "graph")}">신체</span>
-        <span data-action="setExercise" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;${segStyle(state.segment === "exercise")}">운동</span>
-        <span data-action="setRoutine" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;${segStyle(state.segment === "routine")}">루틴</span>
-      </div>
-    </div>
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;${bgStyle}">
+    ${headerHtml}
     ${body}
   </div>`;
       }
@@ -1214,12 +1809,67 @@
           media: false,
         },
         {
+          date: "4.28",
+          title: "4월 28일",
+          sets: [
+            { kg: 62.5, rep: 8 },
+            { kg: 60, rep: 8 },
+            { kg: 60, rep: 8 },
+          ],
+          memo: "",
+          media: false,
+        },
+        {
           date: "4.20",
           title: "4월 20일",
           sets: [
             { kg: 60, rep: 10 },
             { kg: 60, rep: 10 },
             { kg: 55, rep: 10 },
+          ],
+          memo: "무게보다 템포 조절 연습.",
+          media: false,
+        },
+        {
+          date: "4.10",
+          title: "4월 10일",
+          sets: [
+            { kg: 60, rep: 10 },
+            { kg: 55, rep: 10 },
+            { kg: 55, rep: 10 },
+          ],
+          memo: "",
+          media: false,
+        },
+        {
+          date: "3.30",
+          title: "3월 30일",
+          sets: [
+            { kg: 55, rep: 10 },
+            { kg: 55, rep: 10 },
+            { kg: 50, rep: 10 },
+          ],
+          memo: "빈 바 → 중량 전환 2주차.",
+          media: false,
+        },
+        {
+          date: "3.16",
+          title: "3월 16일",
+          sets: [
+            { kg: 50, rep: 12 },
+            { kg: 50, rep: 12 },
+            { kg: 45, rep: 12 },
+          ],
+          memo: "",
+          media: false,
+        },
+        {
+          date: "3.2",
+          title: "3월 2일",
+          sets: [
+            { kg: 45, rep: 12 },
+            { kg: 45, rep: 12 },
+            { kg: 40, rep: 12 },
           ],
           memo: "첫 측정. 하체 기초 근력 테스팅.",
           media: false,
@@ -1296,7 +1946,7 @@
         const xLabelsHtml = recordsWithX
           .map(
             (r) => `
-    <text x="${r.x}" y="145" text-anchor="middle" font-size="10" font-family="-apple-system, BlinkMacSystemFont, sans-serif" fill="#8B95A1" font-variant-numeric="tabular-nums" style="cursor:pointer" data-action="selectDateFromGraph:${r.date}">${r.date}</text>
+    <text x="${r.x}" y="145" text-anchor="middle" font-size="12" font-family="-apple-system, BlinkMacSystemFont, sans-serif" fill="#8B95A1" font-variant-numeric="tabular-nums" style="cursor:pointer" data-action="selectDateFromGraph:${r.date}">${r.date}</text>
   `,
           )
           .join("");
@@ -1307,9 +1957,9 @@
             const isSelected = r.date === selectedRec.date;
 
             return `
-    <div id="card-${r.date}" style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;transition:all 0.2s;border:1.5px solid ${isSelected ? "#FF4E00" : "transparent"};box-shadow:${isSelected ? "0 4px 12px rgba(255,78,0,0.08)" : "none"};">
+    <div id="card-${r.date}" style="background:#FFFFFF;border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;transition:all 0.2s;border:2px solid ${isSelected ? "#FF4E00" : "transparent"};box-shadow:${isSelected ? "0 4px 12px rgba(255,78,0,0.08)" : "none"};">
       <div style="display:flex;align-items:center;justify-content:between">
-        <span style="font-size:15px;font-weight:700;color:#191F28">${r.title}</span>
+        <span style="font-size:16px;font-weight:700;color:#191F28">${r.title}</span>
       </div>
       <!-- 컴팩트 인라인 미니 칩 표시 -->
       <div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -1323,7 +1973,7 @@
           )
           .join("")}
       </div>
-      ${r.memo ? `<div style="font-size:13px;line-height:1.6;color:#4E5968;background:#F2F4F6;border-radius:10px;padding:10px 14px">${r.memo}</div>` : ""}
+      ${r.memo ? `<div style="font-size:14px;line-height:1.6;color:#4E5968;background:#F2F4F6;border-radius:10px;padding:10px 14px">${r.memo}</div>` : ""}
       ${
         r.media
           ? `
@@ -1344,9 +1994,14 @@
 
         return `
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:56px 20px 12px;display:flex;align-items:center;gap:12px">
-      <span data-action="backExercise" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#191F28;font-size:18px">‹</span>
-      <span style="font-size:16px;font-weight:700;color:#191F28">스쿼트 <span style="color:#4E5968;font-weight:500">· 김민지</span></span>
+    <div style="padding:20px 20px 12px;display:flex;align-items:center;gap:12px">
+      <span data-action="backExercise" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg viewBox="0 0 24 24" style="width:22px;height:22px" fill="none" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </span>
+      <span style="font-size:17px;font-weight:600;color:#333D4B">스쿼트</span>
     </div>
     
     <!-- 메인 스크롤 영역 -->
@@ -1436,15 +2091,20 @@
         }
         return `
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-    <div style="padding:56px 20px 12px;display:flex;align-items:center;gap:12px">
-      <span data-action="backMyRoutines" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:#191F28;font-size:18px">‹</span>
+    <div style="padding:20px 20px 12px;display:flex;align-items:center;gap:12px">
+      <span data-action="backMyRoutines" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg viewBox="0 0 24 24" style="width:22px;height:22px" fill="none" stroke="#191F28" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </span>
       <span style="font-size:16px;font-weight:700;color:#191F28">내 루틴</span>
     </div>
     <div style="flex:1;overflow:auto;padding:4px 20px 12px;display:flex;flex-direction:column;gap:8px">
-      ${row("하체 A", "스쿼트 80kg · 레그프레스 140kg · 런지 16kg")}
-      ${row("하체 B", "데드리프트 100kg · 힙쓰러스트 60kg 외 2운동")}
-      ${row("초보자 상체", "벤치프레스 30kg · 랫풀다운 35kg 외 2운동")}
-      ${row("전신 서킷", "케틀벨 스윙 16kg 외 4운동")}
+      ${row("하체 A", `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>스쿼트 80kg 외 2</span>`)}
+      ${row("하체 B", `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>데드리프트 100kg 외 3</span>`)}
+      ${row("초보자 상체", `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>벤치프레스 30kg 외 3</span>`)}
+      ${row("전신 서킷", `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>케틀벨 스윙 16kg 외 4</span>`)}
       <div style="border-radius:14px;padding:16px 20px;text-align:center;background:#FFE9E0"><span style="font-size:14px;font-weight:700;color:#E63E00">+ 새 루틴</span></div>
     </div>
   </div>`;
@@ -1452,15 +2112,81 @@
 
       /* ---------------- 탭바 ---------------- */
       function renderTabbar() {
-        if (state.screen === "record") return "";
+        if (
+          state.screen === "record" ||
+          state.screen === "consultDetail" ||
+          state.screen === "exerciseGraph" ||
+          state.screen === "myRoutines"
+        )
+          return "";
+
+        const inactiveIconColor = "#D1D6DB";
+        const inactiveTextColor = "#4E5968";
+        const activeColor = "#191F28";
+
+        if (state.screen === "memberDetail") {
+          if (state.segment === "graph") return ""; // graph 상세 페이지일 때는 하단 탭바 듀오 숨김
+
+          const h = state.segment === "home",
+            d = state.segment === "diary",
+            e = state.segment === "exercise",
+            r = state.segment === "routine",
+            g = state.segment === "graph";
+
+          const isHomeActive = h || g; // graph 상태일 때도 홈 아이콘 활성화
+
+          const tabStyle = (active) => `
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: ${active ? activeColor : inactiveTextColor};
+            transition: color 0.15s ease;
+          `;
+
+          const iconHtml = (type, active) => {
+            let br = "999px";
+            if (type === "home") br = "999px 999px 0 0";
+            else if (type === "diary") br = "2px";
+            else if (type === "exercise") br = "999px";
+            else if (type === "routine") br = "6px";
+            return `<span style="width:18px;height:18px;border-radius:${br};background:${active ? activeColor : inactiveIconColor};margin-bottom:6px;transition:background-color 0.15s ease"></span>`;
+          };
+
+          return `
+            <div style="position:absolute;left:20px;right:20px;bottom:24px;z-index:${state.sheet || state.showSpeedDial ? 18 : 25};display:flex;gap:8px;height:64px;pointer-events:auto">
+              <!-- 뒤로가기 아일랜드 박스 (둥근 필 형태) -->
+              <div data-action="goMembers" style="width:64px;height:64px;background:#FFFFFF;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(0,0,0,0.04);flex-shrink:0">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px" fill="none" stroke="#4E5968" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </div>
+              
+              <!-- 서브 메뉴 탭 아일랜드 박스 (둥근 필 형태) -->
+              <div style="flex:1;height:64px;background:#FFFFFF;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.1);display:flex;align-items:center;justify-content:space-around;padding:0 12px;border:1px solid rgba(0,0,0,0.04)">
+                <div data-action="setHome" style="${tabStyle(isHomeActive)}">${iconHtml("home", isHomeActive)}<span>홈</span></div>
+                <div data-action="setDiary" style="${tabStyle(d)}">${iconHtml("diary", d)}<span>일지</span></div>
+                <div data-action="setExercise" style="${tabStyle(e)}">${iconHtml("exercise", e)}<span>운동</span></div>
+                <div data-action="setRoutine" style="${tabStyle(r)}">${iconHtml("routine", r)}<span>루틴</span></div>
+              </div>
+            </div>
+          `;
+        }
+
         const sched = isTabActive("schedule"),
           mem = isTabActive("members"),
           prof = isTabActive("profile");
         return `
-  <div style="height:80px;background:#FFFFFF;display:grid;grid-template-columns:1fr 1fr 1fr;box-shadow:0 -1px 8px rgba(25,31,40,.05);flex-shrink:0">
-    <div data-action="goSchedule" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="width:20px;height:20px;border-radius:6px;background:${sched ? CHARCOAL : GRAY}"></span><span style="font-size:11px;font-weight:700;color:${sched ? CHARCOAL : GRAYTXT}">일정</span></div>
-    <div data-action="goMembers" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="width:20px;height:20px;border-radius:999px;background:${mem ? CHARCOAL : GRAY}"></span><span style="font-size:11px;font-weight:700;color:${mem ? CHARCOAL : GRAYTXT}">회원</span></div>
-    <div data-action="goProfile" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><span style="width:20px;height:20px;border-radius:999px 999px 6px 6px;background:${prof ? CHARCOAL : GRAY}"></span><span style="font-size:11px;font-weight:700;color:${prof ? CHARCOAL : GRAYTXT}">내 정보</span></div>
+  <div style="position:relative;height:68px;background:#FFFFFF;display:grid;grid-template-columns:1fr 1fr 1fr;box-shadow:0 -4px 16px rgba(25,31,40,0.06);border-radius:20px 20px 0 0;flex-shrink:0;z-index:${state.sheet || state.showSpeedDial ? 18 : 25}">
+    <div data-action="goSchedule" style="display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:8px 0"><span style="width:20px;height:20px;border-radius:6px;background:${sched ? activeColor : inactiveIconColor};margin-bottom:6px"></span><span style="font-size:14px;font-weight:600;color:${sched ? activeColor : inactiveTextColor}">일정</span></div>
+    <div data-action="goMembers" style="display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:8px 0"><span style="width:20px;height:20px;border-radius:999px;background:${mem ? activeColor : inactiveIconColor};margin-bottom:6px"></span><span style="font-size:14px;font-weight:600;color:${mem ? activeColor : inactiveTextColor}">회원</span></div>
+    <div data-action="goProfile" style="display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:8px 0"><span style="width:20px;height:20px;border-radius:999px 999px 6px 6px;background:${prof ? activeColor : inactiveIconColor};margin-bottom:6px"></span><span style="font-size:14px;font-weight:600;color:${prof ? activeColor : inactiveTextColor}">내 정보</span></div>
   </div>`;
       }
 
@@ -1478,36 +2204,84 @@
       }
 
       function renderSheetSchedule() {
-        const partChipsHtml = ["등", "가슴어깨", "하체", "복근"]
-          .map((p) => {
-            const on = state.scheduleParts.includes(p);
-            return `<span data-action="toggleSchedulePart:${p}" style="font-size:13px;font-weight:${on ? 700 : 500};padding:9px 16px;border-radius:999px;cursor:pointer;background:${on ? "#FFE9E0" : "#F2F4F6"};color:${on ? "#E63E00" : "#4E5968"}">${p}</span>`;
-          })
-          .join("");
+        const toggleHtml = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;background:#E5E8EB;border-radius:14px;padding:4px;margin-bottom:8px">
+            <span data-action="setScheduleType:session" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;cursor:pointer;${state.scheduleType === "session" ? "background:#FFFFFF;font-weight:700;color:#191F28" : "font-weight:500;color:#4E5968"}">수업 일정</span>
+            <span data-action="setScheduleType:consult" style="text-align:center;padding:9px 0;font-size:14px;border-radius:11px;cursor:pointer;${state.scheduleType === "consult" ? "background:#FFFFFF;font-weight:700;color:#191F28" : "font-weight:500;color:#4E5968"}">상담 일정</span>
+          </div>
+        `;
+
+        let formHtml = "";
+
+        if (state.scheduleType === "consult") {
+          formHtml = `
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">상담자 이름</span>
+              <input type="text" placeholder="상담받을 분의 이름을 입력하세요 (비회원)" value="${state.consultantName || ""}" oninput="state.consultantName = this.value" style="width:100%;border:none;background:#F2F4F6;border-radius:12px;padding:14px 18px;font-size:14px;color:#191F28;outline:none" />
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">날짜 · 시간</span>
+              <div style="display:flex;gap:8px">
+                <span style="flex:1.4;background:#F2F4F6;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${state.scheduleDate}</span>
+                <span style="flex:1;background:#FFE9E0;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#E63E00;text-align:center">10:00</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">상담 메모</span>
+              <textarea placeholder="방문 목적, 신체 상태 등 상담 세부 내용을 기록하세요" oninput="state.consultMemo = this.value" style="width:100%;height:80px;border:none;background:#F2F4F6;border-radius:12px;padding:14px 18px;font-size:14px;color:#191F28;outline:none;resize:none">${state.consultMemo || ""}</textarea>
+            </div>
+          `;
+        } else {
+          const parts = ["등", "가슴어깨", "하체", "복근", "기타"];
+          const partChipsHtml = parts
+            .map((p) => {
+              const on = state.scheduleParts.includes(p);
+              const activeBg = "#FFE9E0";
+              const activeColor = "#E63E00";
+              return `<span data-action="toggleSchedulePart:${p}" style="font-size:13px;font-weight:${on ? 700 : 500};padding:9px 16px;border-radius:999px;cursor:pointer;background:${on ? activeBg : "#F2F4F6"};color:${on ? activeColor : "#4E5968"}">${p}</span>`;
+            })
+            .join("");
+
+          const isOtherSelected = state.scheduleParts.includes("기타");
+          const otherInputHtml = isOtherSelected
+            ? `
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+              <span style="font-size:11px;font-weight:600;color:#8B95A1">기타 일정 상세</span>
+              <input type="text" placeholder="상세한 일정을 입력해 주세요" value="${state.otherSchedulePart || ""}" oninput="state.otherSchedulePart = this.value" style="width:100%;border:none;background:#F2F4F6;border-radius:12px;padding:14px 18px;font-size:14px;color:#191F28;outline:none" />
+            </div>`
+            : "";
+
+          formHtml = `
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">회원</span>
+              <div style="background:#F2F4F6;border-radius:14px;padding:15px 18px;display:flex;align-items:center;gap:12px">
+                <span style="width:32px;height:32px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#191F28">김</span>
+                <span style="flex:1;font-size:15px;font-weight:700;color:#191F28">김민지</span>
+                <span style="font-size:12px;color:#8B95A1">변경 ▾</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">날짜 · 시간</span>
+              <div style="display:flex;gap:8px">
+                <span style="flex:1.4;background:#F2F4F6;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">${state.scheduleDate}</span>
+                <span style="flex:1;background:#FFE9E0;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#E63E00;text-align:center">10:00</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:12px;font-weight:600;color:#8B95A1">수업 부위</span>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">${partChipsHtml}</div>
+              ${otherInputHtml}
+            </div>
+          `;
+        }
+
         return sheetChrome(
           "일정 등록",
           `
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12px;font-weight:600;color:#8B95A1">회원</span>
-      <div style="background:#F2F4F6;border-radius:14px;padding:15px 18px;display:flex;align-items:center;gap:12px">
-        <span style="width:32px;height:32px;border-radius:999px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#191F28">김</span>
-        <span style="flex:1;font-size:15px;font-weight:700;color:#191F28">김민지</span>
-        <span style="font-size:12px;color:#8B95A1">변경 ▾</span>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12px;font-weight:600;color:#8B95A1">날짜 · 시간</span>
-      <div style="display:flex;gap:8px">
-        <span style="flex:1.4;background:#F2F4F6;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">7.15 수</span>
-        <span style="flex:1;background:#FFE9E0;border-radius:14px;padding:15px 18px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#E63E00;text-align:center">10:00</span>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12px;font-weight:600;color:#8B95A1">수업 부위</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${partChipsHtml}</div>
-    </div>
-    <div data-action="closeSheet" style="background:#FF4E00;border-radius:14px;padding:17px 0;text-align:center;margin-top:4px"><span style="color:#fff;font-size:16px;font-weight:700">등록</span></div>
-  `,
+          ${toggleHtml}
+          ${formHtml}
+          <div data-action="confirmSchedule" style="background:#FF4E00;border-radius:14px;padding:17px 0;text-align:center;margin-top:4px;cursor:pointer"><span style="color:#fff;font-size:16px;font-weight:700">등록</span></div>
+          `,
         );
       }
 
@@ -1542,7 +2316,7 @@
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:12px;font-weight:600;color:#8B95A1">이미 진행한 횟수 <span style="font-weight:500">(기존 회원이면 입력)</span></span>
+      <span style="font-size:12px;font-weight:600;color:#8B95A1">이미 진행한 횟수  
       <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;display:flex;align-items:baseline;gap:6px">
         <span style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#191F28">4</span>
         <span style="font-size:13px;color:#8B95A1">회 진행 → 잔여 16/20으로 시작해요</span>
@@ -1579,19 +2353,28 @@
       }
 
       function renderSheetEdit() {
+        const member =
+          allMembers.find((m) => m.name === state.selectedMemberName) || {};
+        const nameVal = member.name || state.selectedMemberName || "회원";
+        const isMale = member.gender === "m";
+        const total = member.total || 20;
+        const done = total - (member.left || 0);
+        const activeGender = "background:#FFE9E0;color:#E63E00;font-weight:700";
+        const inactiveGender =
+          "background:#F2F4F6;color:#4E5968;font-weight:500";
         return sheetChrome(
           "회원 정보 수정",
           `
     <div style="display:flex;gap:8px">
       <div style="flex:1.4;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;font-weight:600;color:#8B95A1">이름</span>
-        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28">김민지</div>
+        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28">${nameVal}</div>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;font-weight:600;color:#8B95A1">성별</span>
         <div style="display:flex;gap:6px">
-          <span style="flex:1;background:#F2F4F6;color:#4E5968;font-size:14px;font-weight:500;padding:14px 0;border-radius:14px;text-align:center">남</span>
-          <span style="flex:1;background:#FFE9E0;color:#E63E00;font-size:14px;font-weight:700;padding:14px 0;border-radius:14px;text-align:center">여</span>
+          <span style="flex:1;font-size:14px;padding:14px 0;border-radius:14px;text-align:center;${isMale ? activeGender : inactiveGender}">남</span>
+          <span style="flex:1;font-size:14px;padding:14px 0;border-radius:14px;text-align:center;${isMale ? inactiveGender : activeGender}">여</span>
         </div>
       </div>
     </div>
@@ -1599,14 +2382,14 @@
       <span style="font-size:12px;font-weight:600;color:#8B95A1">연락처</span>
       <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums">010-4821-7736</div>
     </div>
-    <div style="display:flex;gap:8px">
-      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-        <span style="font-size:12px;font-weight:600;color:#8B95A1">이용권 횟수</span>
-        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums">20회</div>
-      </div>
+    <div style="display:flex;gap:8px"> 
       <div style="flex:1;display:flex;flex-direction:column;gap:8px">
         <span style="font-size:12px;font-weight:600;color:#8B95A1">진행 횟수</span>
-        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums">13회</div>
+        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums">${done}회</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:12px;font-weight:600;color:#8B95A1">전체 횟수</span>
+        <div style="background:#F2F4F6;border-radius:14px;padding:14px 18px;font-size:15px;font-weight:700;color:#191F28;font-variant-numeric:tabular-nums">${total}회</div>
       </div>
     </div>
     <div data-action="closeSheet" style="background:#FF4E00;border-radius:14px;padding:17px 0;text-align:center;margin-top:2px"><span style="color:#fff;font-size:16px;font-weight:700">저장</span></div>
@@ -1616,13 +2399,17 @@
 
       function renderSheetLoadRoutine() {
         const rows = routines
-          .map(
-            (r) => `
-    <div data-action="loadRoutine:${r.id}" style="background:#F2F4F6;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:2px;cursor:pointer">
+          .map((r) => {
+            const desc =
+              r.exercises.length > 1
+                ? `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>${r.exercises[0].name} 외 ${r.exercises.length - 1}</span>`
+                : `<span style="display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:999px;background:#FF4E00"></span>${r.exercises[0].name}</span>`;
+            return `
+    <div data-action="loadRoutine:${r.id}" style="background:#F2F4F6;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;cursor:pointer">
       <span style="font-size:15px;font-weight:700;color:#191F28">${r.name}</span>
-      <span style="font-size:12px;color:#8B95A1">${r.exercises.map((e) => e.name).join(" · ")}</span>
-    </div>`,
-          )
+      <span style="font-size:12px;color:#8B95A1">${desc}</span>
+    </div>`;
+          })
           .join("");
         return sheetChrome(
           "루틴 불러오기",
@@ -1630,6 +2417,91 @@
     <span style="font-size:13px;color:#4E5968;line-height:1.5">루틴을 선택하면 현재 기록에 운동이 추가돼요.</span>
     <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
   `,
+        );
+      }
+
+      function renderMonthlyCalendarSheet() {
+        const days = [];
+        const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+        const weekdaysHtml = weekdays
+          .map(
+            (w) =>
+              `<span style="font-size:12px;font-weight:600;color:#8B95A1;text-align:center;padding:8px 0">${w}</span>`,
+          )
+          .join("");
+
+        const year = state.calendarYear || 2026;
+        const month = state.calendarMonth || 7;
+        const firstDay = new Date(year, month - 1, 1).getDay();
+        const lastDate = new Date(year, month, 0).getDate();
+
+        // 1일 이전의 빈칸
+        for (let i = 0; i < firstDay; i++) {
+          days.push(`<span></span>`);
+        }
+
+        // 1일부터 말일까지
+        for (let d = 1; d <= lastDate; d++) {
+          const dateKey = `${month}.${d}`;
+          const sessions =
+            (scheduleData[dateKey] && scheduleData[dateKey].sessions) || [];
+          const hasSession = sessions.some((s) => !s.tags.includes("상담"));
+          const hasConsult = sessions.some((s) => s.tags.includes("상담"));
+          const isSelected = state.scheduleDate === dateKey;
+
+          let borderStyle = "1.5px solid transparent";
+          let dateBg = "transparent";
+          let dateColor = "#191F28";
+          let dateWeight = "500";
+
+          if (isSelected) {
+            borderStyle = "1.5px solid #FF4E00";
+            dateWeight = "700";
+          }
+
+          let dotHtml = "";
+          if (hasSession && hasConsult) {
+            dotHtml = `
+              <div style="display:flex;gap:3px;justify-content:center;margin-top:2px">
+                <span style="width:4px;height:4px;border-radius:99px;background:#FF4E00"></span>
+                <span style="width:4px;height:4px;border-radius:99px;background:#1B64DA"></span>
+              </div>
+            `;
+          } else if (hasSession) {
+            dotHtml = `<div style="display:flex;justify-content:center;margin-top:2px"><span style="width:4px;height:4px;border-radius:99px;background:#FF4E00"></span></div>`;
+          } else if (hasConsult) {
+            dotHtml = `<div style="display:flex;justify-content:center;margin-top:2px"><span style="width:4px;height:4px;border-radius:99px;background:#1B64DA"></span></div>`;
+          } else {
+            dotHtml = `<div style="height:6px"></div>`;
+          }
+
+          days.push(`
+            <div data-action="selectScheduleDateAndClose:${dateKey}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 0;border-radius:12px;border:${borderStyle};background:${dateBg};cursor:pointer;min-height:50px">
+              <span style="font-size:15px;font-weight:${dateWeight};color:${dateColor};font-variant-numeric:tabular-nums">${d}</span>
+              ${dotHtml}
+            </div>
+          `);
+        }
+
+        const daysHtml = days.join("");
+
+        return sheetChrome(
+          "달력",
+          `
+          <div style="display:flex;flex-direction:column;gap:12px;min-height:435px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px;margin-bottom:8px">
+              <span data-action="prevMonth" style="font-size:18px;font-weight:700;color:#8B95A1;cursor:pointer;padding:4px 12px">‹</span>
+              <span style="font-size:16px;font-weight:800;color:#191F28">${year}년 ${month}월</span>
+              <span data-action="nextMonth" style="font-size:18px;font-weight:700;color:#8B95A1;cursor:pointer;padding:4px 12px">›</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+              ${weekdaysHtml}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+              ${daysHtml}
+            </div>
+          </div>
+          `,
         );
       }
 
@@ -1715,6 +2587,8 @@
         let screenHtml;
         if (state.screen === "schedule") screenHtml = renderSchedule();
         else if (state.screen === "record") screenHtml = renderRecord();
+        else if (state.screen === "consultDetail")
+          screenHtml = renderConsultDetail();
         else if (state.screen === "members") screenHtml = renderMembers();
         else if (state.screen === "memberDetail")
           screenHtml = renderMemberDetail();
@@ -1734,23 +2608,96 @@
         else if (state.sheet === "edit") sheetHtml = renderSheetEdit();
         else if (state.sheet === "loadRoutine")
           sheetHtml = renderSheetLoadRoutine();
+        else if (state.sheet === "monthlyCalendar")
+          sheetHtml = renderMonthlyCalendarSheet();
 
         const modalHtml =
           state.sheet === "exercisePicker" ? renderExercisePickerModal() : "";
 
+        // 통합 FAB 및 당근마켓 스타일 스피드 다이얼 오버레이 (이모지/아이콘 절대 금지)
+        let speedDialHtml = "";
+        if (state.showSpeedDial) {
+          speedDialHtml = `
+            <div data-action="closeSpeedDial" style="position:absolute;inset:0;z-index:22;background:rgba(0,0,0,0.4)"></div>
+            <div class="speed-dial-menu" style="position:absolute;right:20px;bottom:160px;z-index:23;display:flex;flex-direction:column;gap:10px;width:180px;">
+              <div style="background:#FFFFFF;border-radius:16px;box-shadow:0 8px 24px rgba(25,31,40,0.12);overflow:hidden;display:flex;flex-direction:column">
+                <div data-action="actionSchedule" style="font-size:15px;font-weight:700;color:#191F28;padding:16px 20px;cursor:pointer;border-bottom:1px solid #EFF2F5;text-align:center">일정 등록</div>
+                <div data-action="actionMember" style="font-size:15px;font-weight:700;color:#191F28;padding:16px 20px;cursor:pointer;text-align:center">회원 등록</div>
+              </div>
+            </div>
+          `;
+        }
+
+        let fabHtml = "";
+        if (state.screen === "schedule" || state.screen === "members") {
+          const isOpened = state.showSpeedDial;
+          fabHtml = `
+            <div data-action="toggleSpeedDial" style="position:absolute;right:20px;bottom:96px;z-index:${isOpened ? 25 : 19};width:56px;height:56px;border-radius:999px;background:${isOpened ? "#FFFFFF" : "#FF4E00"};display:flex;align-items:center;justify-content:center;box-shadow:${isOpened ? "0 6px 20px rgba(0,0,0,0.28)" : "0 6px 16px rgba(255,78,0,0.36)"};cursor:pointer;transition:transform 0.2s, background-color 0.2s">
+              <span style="color:${isOpened ? "#FF4E00" : "#FFFFFF"};font-size:26px;font-weight:500;transform:rotate(${isOpened ? "45deg" : "0deg"});transition:transform 0.2s, color 0.2s;line-height:1">+</span>
+            </div>
+          `;
+        }
+
+        // 위로 돌아가기 버튼: 플로팅 요소(FAB/플로팅 탭바/탭바) 위에 위치
+        const noTabbarScreens = [
+          "record",
+          "consultDetail",
+          "exerciseGraph",
+          "myRoutines",
+        ];
+        let scrollTopBtnBottom;
+        if (state.screen === "schedule" || state.screen === "members")
+          scrollTopBtnBottom = 164; // FAB(bottom 96 + 56) 위
+        else if (state.screen === "memberDetail")
+          scrollTopBtnBottom = 100; // 플로팅 탭바(bottom 24 + 64) 위
+        else if (noTabbarScreens.includes(state.screen))
+          scrollTopBtnBottom = 24;
+        else scrollTopBtnBottom = 88; // 하단 탭바(68) 위
+        const scrollTopBtnHtml = `
+          <div id="scroll-top-btn" data-action="scrollToTop" style="display:none;position:absolute;right:20px;bottom:${scrollTopBtnBottom}px;z-index:19;width:44px;height:44px;border-radius:999px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.04);box-shadow:0 6px 20px rgba(0,0,0,0.14);align-items:center;justify-content:center;cursor:pointer">
+            <svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="#4E5968" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"></polyline></svg>
+          </div>
+        `;
+
         document.getElementById("app").innerHTML = `
-    ${screenHtml}
-    ${renderTabbar()}
-    ${overlay}
-    ${sheetHtml}
-    ${modalHtml}
-  `;
+          ${screenHtml}
+          ${renderTabbar()}
+          ${scrollTopBtnHtml}
+          ${overlay}
+          ${sheetHtml}
+          ${modalHtml}
+          ${speedDialHtml}
+          ${fabHtml}
+        `;
 
         const newContainer = document.getElementById("scroll-container");
         if (newContainer) {
           newContainer.scrollTop = scrollTop;
+          updateScrollTopBtn(newContainer);
         }
       }
+
+      /* ---------------- 위로 돌아가기 ---------------- */
+      let scrollTopTarget = null;
+
+      function updateScrollTopBtn(el) {
+        const btn = document.getElementById("scroll-top-btn");
+        if (!btn || !el) return;
+        // 한 페이지 반 이상 스크롤됐을 때만 표시
+        const show = el.scrollTop > el.clientHeight * 1.5;
+        if (show) scrollTopTarget = el;
+        btn.style.display = show ? "flex" : "none";
+      }
+
+      // scroll 이벤트는 버블링되지 않으므로 캡처 단계에서 감지
+      document.getElementById("app").addEventListener(
+        "scroll",
+        (e) => {
+          if (e.target && typeof e.target.scrollTop === "number")
+            updateScrollTopBtn(e.target);
+        },
+        true,
+      );
 
       document.getElementById("app").addEventListener("click", (e) => {
         const el = e.target.closest("[data-action]");
